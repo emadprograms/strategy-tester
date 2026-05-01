@@ -88,7 +88,21 @@ def main():
         end_date = start_date + datetime.timedelta(days=30)
         print(f"No year specified. Harvesting data for 30 days starting from {start_date}")
     
-    fetch_and_store_range(conn, start_date, end_date)
+    # Chunk the fetching process month by month to avoid investpy payload limits
+    current_start = start_date
+    while current_start <= end_date:
+        # Calculate the end of the current month
+        next_month = current_start.month + 1 if current_start.month < 12 else 1
+        next_year = current_start.year if current_start.month < 12 else current_start.year + 1
+        current_end = datetime.date(next_year, next_month, 1) - datetime.timedelta(days=1)
+        
+        if current_end > end_date:
+            current_end = end_date
+            
+        fetch_and_store_range(conn, current_start, current_end)
+        
+        current_start = current_end + datetime.timedelta(days=1)
+        
     print("Data harvesting complete!")
 
 if __name__ == "__main__":
