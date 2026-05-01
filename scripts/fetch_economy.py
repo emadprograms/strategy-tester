@@ -3,6 +3,12 @@ import datetime
 import os
 import argparse
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 TURSO_URL = os.environ.get("TURSO_DB_URL")
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
