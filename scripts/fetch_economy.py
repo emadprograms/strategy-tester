@@ -88,19 +88,48 @@ def main():
         end_date = start_date + datetime.timedelta(days=30)
         print(f"No year specified. Harvesting data for 30 days starting from {start_date}")
     
-    # Chunk the fetching process into 7-day blocks to avoid investpy payload limits or blocks
+    # Revert to day-by-day fetching with a generous delay and a minimal 2-day range
+    # because Investing.com is aggressively blocking larger range requests.
     import time
-    current_start = start_date
-    while current_start <= end_date:
-        current_end = current_start + datetime.timedelta(days=6)
+    current_date = start_date
+    while current_date <= end_date:
+        formatted_date = current_date.strftime('%d/%m/%Y')
+        next_day = current_date + datetime.timedelta(days=1)
+        formatted_next_day = next_day.strftime('%d/%m/%Y')
         
-        if current_end > end_date:
-            current_end = end_date
+        print(f"Fetching data for {current_date.strftime('%Y-%m-%d')}...")
+        
+        try:
+            df = investpy.economic_calendar(
+                time_zone='GMT -4:00',
+                time_filter='time_only',
+                countries=['united states'],
+                from_date=formatted_date,
+                to_date=formatted_next_day
+            )
             
-        fetch_and_store_range(conn, current_start, current_end)
-        
-        current_start = current_end + datetime.timedelta(days=1)
-        time.sleep(1) # Small delay to be polite to the server
+            if df is not None and not df.empty:
+                # Filter to only keep the target date
+                df_filtered = df[df['date'] == formatted_date]
+                if not df_filtered.empty:
+                    events = df_filtered[['time', 'importance', 'event']].to_dict('records')
+                    events_str = "\n".join([f"{e['time']} [{e['importance']}] - {e['event']}" for e in events])
+                    
+                    conn.execute(
+                        "INSERT OR REPLACE INTO economic_calendar (date, events) VALUES (?, ?)",
+                        (current_date.strftime('%Y-%m-%d'), events_str)
+                    )
+                    conn.commit()
+                else:
+                    print(f"No events found for {formatted_date}.")
+            else:
+                print(f"No data returned for {formatted_date}.")
+                
+        except Exception as e:
+            print(f"Error fetching for {current_date.strftime('%Y-%m-%d')}: {e}")
+            
+        current_date = current_date + datetime.timedelta(days=1)
+        time.sleep(2) # Generous delay to avoid being flagged
         
     print("Data harvesting complete!")
 
