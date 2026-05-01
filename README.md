@@ -31,10 +31,12 @@ This application is designed to be deployed directly to Vercel without requiring
 
 1. **Push to GitHub:** Commit all files and push this repository to GitHub.
 2. **Import to Vercel:** Log into Vercel, click **Add New > Project**, and select this repository.
-3. **Set Environment Variables:** During the Vercel setup process, you must provide your Turso credentials (which you can fetch from Infisical). Add the following variables:
+3. **Configure Project:** 
+   - **Important:** Set the **Root Directory** to `web` (since we moved the frontend code into its own folder).
+4. **Set Environment Variables:** During the Vercel setup process, you must provide your Turso credentials (which you can fetch from Infisical). Add the following variables:
    - `TURSO_DB_URL`: Your Turso database URL.
    - `TURSO_AUTH_TOKEN`: Your Turso authentication token.
-4. **Deploy:** Vercel will automatically install the Next.js dependencies and deploy the application.
+5. **Deploy:** Vercel will automatically install the Next.js dependencies and deploy the application.
 
 ## Automatic Data Harvesting
 
