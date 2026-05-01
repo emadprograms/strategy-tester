@@ -15,6 +15,7 @@ async def get_premarket_data(date):
     # Assuming the table structure is market_context(date, spy_setup, economic_events, market_sentiment)
     query = f"SELECT economic_events FROM market_context WHERE date = '{date}'"
     result = await client.execute(query)
+    print(f"DEBUG: Full query response: {result}")
     
     if result.rows:
         return result.rows[0][0]
