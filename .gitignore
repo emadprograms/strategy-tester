@@ -1,0 +1,6 @@
+archive_data.db
+strategy_log.db
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
