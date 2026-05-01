@@ -2,6 +2,7 @@ import investpy
 import datetime
 import os
 import sqlite3
+import argparse
 
 TURSO_URL = os.environ.get("TURSO_DB_URL")
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
@@ -27,6 +28,10 @@ def get_economic_events(date_str):
         return "Error fetching events."
 
 def main():
+    parser = argparse.ArgumentParser(description='Harvest Economic Calendar')
+    parser.add_argument('--year', type=int, help='The year to fetch data for (e.g. 2024)')
+    args = parser.parse_args()
+
     if not TURSO_URL or not TURSO_TOKEN:
         print("Missing Turso credentials. Exiting.")
         return
@@ -44,15 +49,29 @@ def main():
     ''')
     conn.commit()
 
-    # Backfill for the current month (or adjust range as needed)
-    today = datetime.date.today()
-    start_date = today.replace(day=1)
+    if args.year:
+        print(f"Harvesting data for the entire year: {args.year}")
+        start_date = datetime.date(args.year, 1, 1)
+        # Determine number of days in that year
+        num_days = 366 if (args.year % 4 == 0 and (args.year % 100 != 0 or args.year % 400 == 0)) else 365
+    else:
+        # Default behavior: run for the next 30 days starting from the first of the current month
+        today = datetime.date.today()
+        start_date = today.replace(day=1)
+        num_days = 30
+        print(f"No year specified. Harvesting data for 30 days starting from {start_date}")
     
-    # Example: run for the next 30 days
-    for i in range(30):
+    for i in range(num_days):
         target_date = start_date + datetime.timedelta(days=i)
         date_str = target_date.strftime('%Y-%m-%d')
-        print(f"Fetching data for {date_str}...")
+        
+        # Don't fetch future dates if we're in the current year
+        if target_date > datetime.date.today() and not args.year:
+             # If we are in the default mode, we only fetch up to today + some buffer or just 30 days
+             # The original code did 30 days regardless of future.
+             pass
+
+        print(f"[{i+1}/{num_days}] Fetching data for {date_str}...")
         events_str = get_economic_events(date_str)
         
         try:
