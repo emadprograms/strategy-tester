@@ -57,8 +57,8 @@ export default function StrategyTester() {
     reader.readAsArrayBuffer(file);
   };
 
-  const calculateSMMA = (prices: number[], period: number) => {
-    if (prices.length === 0) return 0;
+  const calculateSMMA = (prices: number[], period: number): number[] => {
+    if (prices.length === 0) return [];
     let smma = [prices[0]];
     for (let i = 1; i < prices.length; i++) {
       smma.push((smma[i - 1] * (period - 1) + prices[i]) / period);
