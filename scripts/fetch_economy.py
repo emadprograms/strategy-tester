@@ -11,17 +11,26 @@ def get_economic_events(date_str):
     try:
         dt = datetime.datetime.strptime(date_str, '%Y-%m-%d')
         formatted_date = dt.strftime('%d/%m/%Y')
+        
+        # investpy requires to_date > from_date
+        next_dt = dt + datetime.timedelta(days=1)
+        formatted_next_date = next_dt.strftime('%d/%m/%Y')
+        
         df = investpy.economic_calendar(
             time_zone='GMT -4:00',
             time_filter='time_only',
             countries=['united states'],
             from_date=formatted_date,
-            to_date=formatted_date
+            to_date=formatted_next_date
         )
+        
         if df is not None and not df.empty:
-            events = df[['time', 'importance', 'event']].to_dict('records')
-            summary = "\n".join([f"{e['time']} [{e['importance']}] - {e['event']}" for e in events])
-            return summary
+            # Filter to only keep the target date since we fetched 2 days
+            df_filtered = df[df['date'] == formatted_date]
+            if not df_filtered.empty:
+                events = df_filtered[['time', 'importance', 'event']].to_dict('records')
+                summary = "\n".join([f"{e['time']} [{e['importance']}] - {e['event']}" for e in events])
+                return summary
         return "No significant events."
     except Exception as e:
         print(f"Error fetching for {date_str}: {e}")
