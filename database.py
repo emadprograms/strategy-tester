@@ -1,6 +1,5 @@
 import sqlite3
 import pandas as pd
-import investpy
 from datetime import datetime
 import os
 
@@ -48,6 +47,7 @@ def get_economic_events(date_str):
     Fetches economic events for the US for the given date using investpy.
     """
     try:
+        import investpy
         dt = datetime.strptime(date_str, '%Y-%m-%d')
         formatted_date = dt.strftime('%d/%m/%Y')
         df = investpy.economic_calendar(time_zone='GMT -4:00', time_filter='time_only', countries=['united states'], from_date=formatted_date, to_date=formatted_date)
@@ -56,6 +56,8 @@ def get_economic_events(date_str):
             summary = "\n".join([f"{e['time']} [{e['importance']}] - {e['event']}" for e in events])
             return summary
         return "No significant events."
+    except ImportError:
+        return "investpy not available (requires setuptools<70). Run: pip install setuptools==69.5.1"
     except Exception as e:
         return f"Error fetching events from investpy: {e}"
 
