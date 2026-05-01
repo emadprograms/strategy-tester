@@ -7,6 +7,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Strategy Tester Terminal",
   description: "Advanced Strategy Analysis Terminal",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
