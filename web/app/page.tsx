@@ -142,20 +142,16 @@ export default function StrategyTester() {
       <aside 
         className={`flex flex-col justify-between bg-black/60 backdrop-blur-2xl border-r border-white/[0.08] transition-all duration-300 ease-in-out relative ${isSidebarOpen ? 'w-72' : 'w-20'} z-50`}
       >
-        {/* Toggle Button */}
-        <button 
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute -right-3 top-8 bg-[#111] border border-white/10 rounded-full p-1.5 hover:bg-white/10 transition-colors z-50"
-        >
-          {isSidebarOpen ? <ChevronLeft size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
-        </button>
-
         <div className="flex flex-col h-full overflow-hidden">
           {/* Header */}
           <div className="h-24 flex items-center px-6 border-b border-white/[0.05]">
-            <div className={`w-10 h-10 min-w-[40px] rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all ${!isSidebarOpen && 'ml-[-4px]'}`}>
+            <button 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className={`w-10 h-10 min-w-[40px] rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-105 active:scale-95 cursor-pointer transition-all ${!isSidebarOpen && 'ml-[-4px]'}`}
+              title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+            >
               <TrendingUp size={22} className="text-white" />
-            </div>
+            </button>
             <div className={`ml-4 whitespace-nowrap overflow-hidden transition-all duration-300 ${isSidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4 w-0'}`}>
               <h1 className="font-bold text-lg tracking-tight text-white">Strategy Tester</h1>
               <p className="text-[10px] text-indigo-400 uppercase tracking-widest font-semibold">Terminal V2</p>
