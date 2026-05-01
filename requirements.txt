@@ -1,0 +1,4 @@
+investpy
+python-dotenv
+libsql-experimental
+pandas
