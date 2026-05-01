@@ -1,31 +1,22 @@
 # Strategy Tester Project Log
 
 ## Architecture & Goals
-This repository contains a local application designed to log, stress-test, and analyze a trading strategy. The application relies on `archive_data.db` to pull historical 1-minute data for calculating Smoothed Moving Averages (SMMAs) and uses `investpy` to load historical economic calendar events.
+This repository contains a Vercel-ready Next.js application designed to log, stress-test, and analyze a trading strategy. It uses Turso as the cloud database backend and GitHub Actions to automatically harvest historical economic calendar data.
 
 ## Components Created
 
-### 1. `app.py`
-A Streamlit web interface with two primary tabs:
-- **Data Logger:** A unified form to log the trade context (SPY setup, economic events, market sentiment) and specific trade data (strategy name, risk:reward, actual movement, 1-day setup, PnL, result). Features an "Auto-Fill" button that intelligently pulls and analyzes historical data.
-- **Pattern Analyzer:** A dashboard displaying logged trades in a DataFrame, with summary statistics (Win Rate, Total Trades, Total PnL in R) and ticker filtering capabilities.
+### 1. Next.js Frontend (`app/page.tsx`)
+A modern, glassmorphic UI built with React and TailwindCSS.
+- **In-Browser Database Parsing:** The application accepts a massive `archive_data.db` upload from the user, loading it directly into browser memory using `sql.js` (WebAssembly). This allows the app to query 1-minute historical data and calculate 45-minute SMMA statistics (9, 50, 200) without relying on a server.
+- **Data Logger & Pattern Analyzer:** Forms and dashboards for logging qualitative trade data and viewing aggregated statistics.
 
-### 2. `database.py`
-The data access layer responsible for:
-- Initializing the local `strategy_log.db` SQLite database with the `market_context` and `trades` tables.
-- Connecting to the user's `archive_data.db` to fetch historical 1-minute stock data.
-- Calculating **SMMA 9, SMMA 50, and SMMA 200** to dynamically describe the stock's first 45 minutes of movement.
-- Fetching historical US economic events using `investpy`.
-- Saving new trades and querying all trades via pandas DataFrames.
+### 2. Turso Serverless Backend (`app/actions.ts` & `lib/turso.ts`)
+Next.js Server Actions encapsulate the `@libsql/client` logic to securely read and write `market_context` and `trades` directly to the Turso cloud database without exposing credentials to the client.
 
-### 3. `requirements.txt`
-Project dependencies:
-- `streamlit`
-- `pandas`
-- `investpy`
-- `ta`
-- `sqlalchemy`
+### 3. GitHub Actions Data Harvester
+- **`scripts/fetch_economy.py`:** A standalone Python script that uses `investpy` to retrieve the United States economic calendar.
+- **`.github/workflows/harvest.yml`:** Automates the Python script to run every Sunday, injecting the upcoming economic events into the `economic_calendar` table in Turso.
 
 ### 4. Configuration & Environment
-- **`.venv/`**: A virtual environment initialized with Python 3.12.
-- **`.gitignore`**: Configured to ignore local databases (`archive_data.db`, `strategy_log.db`), python caches (`__pycache__`), and the `.venv/` directory to keep the repository clean.
+- **`.gitignore`**: Configured to ignore local databases, `.env` files, `.next/` builds, and `node_modules/`.
+- **`package.json`**: Contains dependencies for Next.js, `sql.js`, `@libsql/client`, Recharts, and Tailwind utilities. (Modules remain uninstalled locally to prevent pollution, deferring installation to the Vercel deployment pipeline).
