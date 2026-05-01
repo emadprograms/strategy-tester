@@ -11,7 +11,7 @@ Contains the entirety of the Next.js React frontend and API routes.
 - **Turso Serverless Backend (`web/app/actions.ts` & `web/lib/turso.ts`):** Next.js Server Actions encapsulate the `@libsql/client` logic to securely read and write `market_context` and `trades` directly to the Turso cloud database without exposing credentials to the client.
 
 ### 2. `scripts/` & `.github/` (Data Harvester)
-- **`scripts/fetch_economy.py`:** A standalone Python script that uses `investpy` to retrieve the United States economic calendar. It accepts an optional `--year` argument to fetch data for an entire year; otherwise, it defaults to the current month.
+- **`scripts/fetch_economy.py`:** A standalone Python script that uses `investpy` to retrieve the United States economic calendar. It is optimized to bulk-fetch data via date ranges (significantly reducing network requests). It accepts an optional `--year` argument to fetch data for an entire year; otherwise, it defaults to the current month.
 - **`.github/workflows/harvest.yml`:** Automates the Python script to run every Sunday. It also supports manual triggers (`workflow_dispatch`) with an optional `year` input, allowing users to backfill historical economic data for a specific year into Turso.
 
 ### 3. Root Configuration
