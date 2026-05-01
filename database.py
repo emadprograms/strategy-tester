@@ -70,7 +70,7 @@ def calculate_smma(df, column, period):
 def get_archive_data(ticker, date_str):
     """
     Connects to archive_data.db and returns data for the ticker on the given date.
-    It attempts to find the correct table dynamically.
+    It reads from the 'market_data' table or falls back to legacy table names.
     """
     if not os.path.exists(ARCHIVE_DB_NAME):
         return None
@@ -81,31 +81,44 @@ def get_archive_data(ticker, date_str):
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [t[0] for t in cursor.fetchall()]
         
-        target_table = None
-        if ticker in tables:
-            target_table = ticker
-        elif ticker.upper() in tables:
-            target_table = ticker.upper()
-        elif f"{ticker}_1m" in tables:
-            target_table = f"{ticker}_1m"
-        elif 'stock_data' in tables:
-            target_table = 'stock_data'
-        elif 'historical_data' in tables:
-            target_table = 'historical_data'
-        
-        if not target_table:
-            conn.close()
-            return None
-            
-        # We query by searching for the date as a substring to handle both DATE and DATETIME
-        if target_table in ['stock_data', 'historical_data']:
-             query = f"SELECT * FROM {target_table} WHERE ticker='{ticker}' AND (date LIKE '{date_str}%' OR datetime LIKE '{date_str}%')"
+        if 'market_data' in tables:
+            query = f"SELECT * FROM market_data WHERE symbol='{ticker}' AND timestamp LIKE '{date_str}%'"
         else:
-             query = f"SELECT * FROM {target_table} WHERE date LIKE '{date_str}%' OR datetime LIKE '{date_str}%'"
+            target_table = None
+            if ticker in tables:
+                target_table = ticker
+            elif ticker.upper() in tables:
+                target_table = ticker.upper()
+            elif f"{ticker}_1m" in tables:
+                target_table = f"{ticker}_1m"
+            elif 'stock_data' in tables:
+                target_table = 'stock_data'
+            elif 'historical_data' in tables:
+                target_table = 'historical_data'
+            
+            if not target_table:
+                conn.close()
+                return None
+                
+            if target_table in ['stock_data', 'historical_data']:
+                 query = f"SELECT * FROM {target_table} WHERE ticker='{ticker}' AND (date LIKE '{date_str}%' OR datetime LIKE '{date_str}%')"
+            else:
+                 query = f"SELECT * FROM {target_table} WHERE date LIKE '{date_str}%' OR datetime LIKE '{date_str}%'"
              
         df = pd.read_sql_query(query, conn)
         conn.close()
         
+        if not df.empty:
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df = df.sort_values('timestamp')
+            elif 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.sort_values('date')
+            elif 'datetime' in df.columns:
+                df['datetime'] = pd.to_datetime(df['datetime'])
+                df = df.sort_values('datetime')
+                
         return df
     except Exception as e:
         print(f"Error accessing archive_data.db: {e}")
