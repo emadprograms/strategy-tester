@@ -1,142 +1,161 @@
-import investpy
+import finnhub
 import datetime
 import os
 import argparse
+import asyncio
+import time
+import pytz
+from collections import defaultdict
+from libsql_client import create_client
+from dotenv import load_dotenv
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+load_dotenv()
 
+FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY")
 TURSO_URL = os.environ.get("TURSO_DB_URL")
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
-def fetch_and_store_range(conn, start_date, end_date):
-    formatted_start = start_date.strftime('%d/%m/%Y')
-    formatted_end = end_date.strftime('%d/%m/%Y')
-    
-    print(f"Fetching data from {formatted_start} to {formatted_end}...")
-    
-    try:
-        df = investpy.economic_calendar(
-            time_zone='GMT -4:00',
-            time_filter='time_only',
-            countries=['united states'],
-            from_date=formatted_start,
-            to_date=formatted_end
-        )
-        
-        if df is None or df.empty:
-            print("No data found for this range.")
-            return
+if TURSO_URL and TURSO_URL.startswith("libsql://"):
+    TURSO_URL = TURSO_URL.replace("libsql://", "https://")
 
-        # Group by the date column
-        grouped = df.groupby('date')
-        
-        for date_val, group in grouped:
-            # Parse the date back to '%Y-%m-%d' to store in DB
-            try:
-                dt = datetime.datetime.strptime(date_val, '%d/%m/%Y')
-                db_date_str = dt.strftime('%Y-%m-%d')
-            except ValueError:
-                # Fallback if format is different
-                print(f"Warning: Unexpected date format from investpy: {date_val}")
-                continue
-                
-            events = group[['time', 'importance', 'event']].to_dict('records')
-            events_str = "\n".join([f"{e['time']} [{e['importance']}] - {e['event']}" for e in events])
-            
-            try:
-                conn.execute(
-                    "INSERT OR REPLACE INTO economic_calendar (date, events) VALUES (?, ?)",
-                    (db_date_str, events_str)
-                )
-            except Exception as e:
-                print(f"Failed to insert for {db_date_str}: {e}")
-                
-        conn.commit()
-        print(f"Successfully processed {len(grouped)} days with events.")
-        
-    except Exception as e:
-        print(f"Error fetching range: {e}")
-
-def main():
-    parser = argparse.ArgumentParser(description='Harvest Economic Calendar')
-    parser.add_argument('--year', type=int, help='The year to fetch data for (e.g. 2024)')
-    args = parser.parse_args()
-
+async def store_data_by_year(events_by_date):
     if not TURSO_URL or not TURSO_TOKEN:
-        print("Missing Turso credentials. Exiting.")
+        print("Missing Turso credentials. Skipping storage.")
         return
 
-    # Use libsql-experimental for Turso connection in Python
-    import libsql_experimental as libsql
-    conn = libsql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
-    
-    # Create table if it doesn't exist
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS economic_calendar (
-            date TEXT PRIMARY KEY,
-            events TEXT
-        )
-    ''')
-    conn.commit()
+    # Group events by year
+    year_groups = defaultdict(dict)
+    for date_str, events in events_by_date.items():
+        year = date_str.split('-')[0]
+        year_groups[year][date_str] = events
 
-    if args.year:
-        print(f"Harvesting data for the entire year: {args.year}")
-        start_date = datetime.date(args.year, 1, 1)
-        end_date = datetime.date(args.year, 12, 31)
-    else:
-        # Default behavior: run for the next 30 days starting from the first of the current month
-        today = datetime.date.today()
-        start_date = today.replace(day=1)
-        end_date = start_date + datetime.timedelta(days=30)
-        print(f"No year specified. Harvesting data for 30 days starting from {start_date}")
-    
-    # Revert to day-by-day fetching with a generous delay and a minimal 2-day range
-    # because Investing.com is aggressively blocking larger range requests.
-    import time
-    current_date = start_date
-    while current_date <= end_date:
-        formatted_date = current_date.strftime('%d/%m/%Y')
-        next_day = current_date + datetime.timedelta(days=1)
-        formatted_next_day = next_day.strftime('%d/%m/%Y')
-        
-        print(f"Fetching data for {current_date.strftime('%Y-%m-%d')}...")
-        
-        try:
-            df = investpy.economic_calendar(
-                time_zone='GMT -4:00',
-                time_filter='time_only',
-                countries=['united states'],
-                from_date=formatted_date,
-                to_date=formatted_next_day
-            )
-            
-            if df is not None and not df.empty:
-                # Filter to only keep the target date
-                df_filtered = df[df['date'] == formatted_date]
-                if not df_filtered.empty:
-                    events = df_filtered[['time', 'importance', 'event']].to_dict('records')
-                    events_str = "\n".join([f"{e['time']} [{e['importance']}] - {e['event']}" for e in events])
-                    
-                    conn.execute(
-                        "INSERT OR REPLACE INTO economic_calendar (date, events) VALUES (?, ?)",
-                        (current_date.strftime('%Y-%m-%d'), events_str)
-                    )
-                    conn.commit()
-                else:
-                    print(f"No events found for {formatted_date}.")
-            else:
-                print(f"No data returned for {formatted_date}.")
+    print(f"Connecting to Turso at {TURSO_URL}...")
+    try:
+        async with create_client(TURSO_URL, auth_token=TURSO_TOKEN) as client:
+            for year, year_events in year_groups.items():
+                table_name = f"economic_calendar_{year}"
+                print(f"Storing data for year {year} in table {table_name}...")
                 
-        except Exception as e:
-            print(f"Error fetching for {current_date.strftime('%Y-%m-%d')}: {e}")
+                await client.execute(f'''
+                    CREATE TABLE IF NOT EXISTS {table_name} (
+                        date TEXT PRIMARY KEY,
+                        events TEXT
+                    )
+                ''')
+                
+                for date_str, events in sorted(year_events.items()):
+                    events_text = "\n".join(events)
+                    await client.execute(
+                        f"INSERT OR REPLACE INTO {table_name} (date, events) VALUES (?, ?)",
+                        (date_str, events_text)
+                    )
+                print(f"Successfully updated {len(year_events)} days in {table_name}")
+    except Exception as e:
+        print(f"Database error: {e}")
+
+def fetch_range(finnhub_client, start_date, end_date):
+    start_str = start_date.strftime("%Y-%m-%d")
+    end_str = end_date.strftime("%Y-%m-%d")
+    
+    print(f"Requesting Finnhub data from {start_str} to {end_str}...")
+    try:
+        response = finnhub_client.calendar_economic(_from=start_str, to=end_str)
+        all_events = response.get('economicCalendar', [])
+    except Exception as e:
+        print(f"Finnhub API error: {e}")
+        return {}
+    
+    events_by_date = {}
+    importance_map = {1: "low", 2: "medium", 3: "high"}
+    utc_tz = pytz.utc
+    et_tz = pytz.timezone('US/Eastern')
+    
+    match_count = 0
+    for event in all_events:
+        if event.get('country') != 'US':
+            continue
+
+        event_time_raw = event.get('time')
+        if not event_time_raw:
+            continue
             
-        current_date = current_date + datetime.timedelta(days=1)
-        time.sleep(2) # Generous delay to avoid being flagged
-        
+        try:
+            dt_utc = datetime.datetime.strptime(event_time_raw, "%Y-%m-%d %H:%M:%S")
+            dt_utc = utc_tz.localize(dt_utc)
+            dt_et = dt_utc.astimezone(et_tz)
+            event_date_et = dt_et.date()
+            
+            if not (start_date <= event_date_et <= end_date):
+                continue
+
+            impact = event.get('impact', 'unknown').lower()
+            if impact not in ['medium', 'high']:
+                continue
+            
+            actual = event.get('actual', '')
+            estimate = event.get('estimate', '')
+            prev = event.get('prev', '')
+            unit = event.get('unit', '')
+
+            time_str = dt_et.strftime("%H:%M")
+            event_name = event.get('event', 'Unknown Event')
+            
+            details = []
+            if actual is not None and actual != '': details.append(f"Act: {actual}{unit}")
+            if estimate is not None and estimate != '': details.append(f"Exp: {estimate}{unit}")
+            if prev is not None and prev != '': details.append(f"Prev: {prev}{unit}")
+            
+            details_str = f" ({', '.join(details)})" if details else ""
+            event_entry = f"{time_str} [{impact}] - {event_name}{details_str}"
+            
+            match_count += 1
+            date_str = event_date_et.strftime("%Y-%m-%d")
+            
+            if date_str not in events_by_date:
+                events_by_date[date_str] = []
+            events_by_date[date_str].append(event_entry)
+        except Exception:
+            continue
+            
+    return events_by_date
+
+def main():
+    parser = argparse.ArgumentParser(description='Harvest Economic Calendar using Finnhub')
+    parser.add_argument('--start', type=str, help='Start date in YYYY-MM-DD format')
+    parser.add_argument('--end', type=str, help='End date in YYYY-MM-DD format')
+    args = parser.parse_args()
+
+    if not FINNHUB_API_KEY:
+        print("Error: FINNHUB_API_KEY not found in .env file.")
+        return
+
+    finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
+
+    if args.start and args.end:
+        start_date = datetime.datetime.strptime(args.start, "%Y-%m-%d").date()
+        end_date = datetime.datetime.strptime(args.end, "%Y-%m-%d").date()
+    else:
+        # Default: Two weeks (Current + Next)
+        start_date = datetime.date.today()
+        end_date = start_date + datetime.timedelta(days=14)
+
+    # Process in 30-day chunks to respect API/stability
+    ranges = []
+    temp_start = start_date
+    while temp_start <= end_date:
+        temp_end = min(temp_start + datetime.timedelta(days=30), end_date)
+        ranges.append((temp_start, temp_end))
+        temp_start = temp_end + datetime.timedelta(days=1)
+
+    all_fetched_events = {}
+    for i, (start, end) in enumerate(ranges):
+        if i > 0:
+            time.sleep(2)
+        events = fetch_range(finnhub_client, start, end)
+        all_fetched_events.update(events)
+
+    print(f"Total US Med/High events found: {sum(len(v) for v in all_fetched_events.values())}")
+    asyncio.run(store_data_by_year(all_fetched_events))
     print("Data harvesting complete!")
 
 if __name__ == "__main__":

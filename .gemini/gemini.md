@@ -1,22 +1,28 @@
 # Strategy Tester Project Log
 
 ## Architecture & Goals
-This repository contains a Vercel-ready Next.js application designed to log, stress-test, and analyze a trading strategy. It uses Turso as the cloud database backend and GitHub Actions to automatically harvest historical economic calendar data. The codebase has been strictly organized to decouple the web application from background scripts, leaving a clean repository root.
+This repository contains a Vercel-ready Next.js application designed to log, stress-test, and analyze a trading strategy. It uses Turso as the cloud database backend and GitHub Actions to automatically harvest historical economic calendar data. The codebase is organized to decouple the web application from background scripts.
 
 ## Directory Structure
 
 ### 1. `web/` (Next.js Application)
 Contains the entirety of the Next.js React frontend and API routes.
-- **In-Browser Database Parsing (`web/app/page.tsx`):** The application accepts a massive `archive_data.db` upload from the user, loading it directly into browser memory using `sql.js` (WebAssembly). This allows the app to query 1-minute historical data and calculate 45-minute SMMA statistics (9, 50, 200) locally.
-- **Turso Serverless Backend (`web/app/actions.ts` & `web/lib/turso.ts`):** Next.js Server Actions encapsulate the `@libsql/client` logic to securely read and write `market_context` and `trades` directly to the Turso cloud database without exposing credentials to the client.
+- **In-Browser Database Parsing:** The application loads user-uploaded `archive_data.db` into browser memory using `sql.js` (WebAssembly) for high-performance querying and local indicator calculation (SMMA).
+- **Turso Serverless Backend:** Next.js Server Actions use `@libsql/client` to read/write `market_context` and `trades` to the Turso cloud database.
 
 ### 2. `scripts/` & `.github/` (Data Harvester)
-- **`scripts/fetch_economy.py`:** A standalone Python script that uses `investpy` to retrieve the United States economic calendar. It is configured to fetch data day-by-day with a delay to bypass aggressive anti-bot protections. It accepts an optional `--year` argument to backfill an entire year.
-- **`.github/workflows/harvest.yml`:** Automates the Python script to run every Sunday. It also supports manual triggers (`workflow_dispatch`) with an optional `year` input, allowing users to backfill historical economic data for a specific year into Turso.
+- **`scripts/fetch_economy.py`:** A Python script that uses the **Finnhub API** to retrieve US economic events. 
+  - **Filtering:** Only Medium and High impact events are stored.
+  - **Timezone:** All events are converted from UTC to **Eastern Time (ET)** before storage.
+  - **Schema:** Events are stored in year-specific tables (e.g., `economic_calendar_2025`) to optimize query performance and organization.
+  - **Arguments:** Supports custom `--start` and `--end` dates (YYYY-MM-DD).
+- **`.github/workflows/harvest.yml`:** Automates the harvester to run every Sunday. Supports manual triggers with custom date ranges. Requires `FINNHUB_API_KEY`, `TURSO_DB_URL`, and `TURSO_AUTH_TOKEN` secrets.
 
 ### 3. Root Configuration
-- **`README.md`:** Detailed instructions on usage and Vercel deployment (specifying the root directory as `web`).
-- **`.gitignore`:** Configured to ignore local databases, `.env` files, `.next/` builds, and `node_modules/`.
+- **`requirements.txt`:** Python dependencies for the harvester (`finnhub-python`, `libsql-client`, `pandas`, `pytz`, `python-dotenv`).
+- **`.gitignore`:** Configured to ignore local environments (`.venv`, `.env`), build artifacts (`.next/`, `node_modules/`), and temporary database files.
 
-## Cleanup Notes
-- Legacy Streamlit files (`app.py`, `database.py`, `requirements.txt`) were permanently removed to prevent repository pollution, completely transitioning the project to a pure Next.js Serverless architecture.
+## Recent Updates
+- **API Migration:** Transitioned from `investpy` (scraping-based) to **Finnhub API** to bypass aggressive Cloudflare bot protection on Investing.com.
+- **Schema Refactor:** Implemented year-based tables (`economic_calendar_YYYY`) instead of a single massive table.
+- **Improved Data Accuracy:** Included `Actual`, `Estimate`, and `Previous` values in the stored event strings, ensuring all timestamps are in Eastern Time.

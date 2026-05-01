@@ -1,4 +1,6 @@
 investpy
 python-dotenv
-libsql-experimental
+libsql-client
 pandas
+cloudscraper
+finnhub-python
