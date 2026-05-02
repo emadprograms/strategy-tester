@@ -221,7 +221,7 @@ export default function StrategyTester() {
            </div>
         </div>
 
-        <div className="max-w-5xl mx-auto p-4 md:p-10 pb-32 md:pb-24">
+        <div className="w-full p-4 md:p-10 pb-32 md:pb-24">
           
           {/* Mobile Database Loader */}
           {!isDbLoaded && (
